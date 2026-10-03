@@ -1,0 +1,159 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.8.0",
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_wafv2_web_acl.main",
+          "mode": "managed",
+          "type": "aws_wafv2_web_acl",
+          "name": "main",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "waf-prod-01",
+            "name": "Production-Enterprise-WAF",
+            "scope": "REGIONAL",
+            "description": "Production WAF inspecting all public web traffic"
+          }
+        },
+        {
+          "address": "aws_security_group.alb_sg",
+          "mode": "managed",
+          "type": "aws_security_group",
+          "name": "alb_sg",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "sg-alb-01",
+            "name": "production-alb-sg",
+            "description": "Ingress from public internet",
+            "ingress": [
+              {
+                "from_port": 443,
+                "to_port": 443,
+                "protocol": "tcp",
+                "cidr_blocks": ["0.0.0.0/0"],
+                "security_groups": []
+              }
+            ]
+          }
+        },
+        {
+          "address": "aws_lb.public_alb",
+          "mode": "managed",
+          "type": "aws_lb",
+          "name": "public_alb",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-alb",
+            "name": "production-public-alb",
+            "dns_name": "prod-alb-12345.us-east-1.elb.amazonaws.com",
+            "security_groups": ["sg-alb-01"]
+          }
+        },
+        {
+          "address": "aws_security_group.app_sg",
+          "mode": "managed",
+          "type": "aws_security_group",
+          "name": "app_sg",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "sg-app-01",
+            "name": "production-app-sg",
+            "description": "Ingress from ALB only",
+            "ingress": [
+              {
+                "from_port": 8080,
+                "to_port": 8080,
+                "protocol": "tcp",
+                "cidr_blocks": [],
+                "security_groups": ["sg-alb-01"]
+              }
+            ]
+          }
+        },
+        {
+          "address": "aws_instance.app_server",
+          "mode": "managed",
+          "type": "aws_instance",
+          "name": "app_server",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "i-0a1b2c3d4e5f6001",
+            "private_ip": "10.0.1.25",
+            "tags": {
+              "Name": "Core Application Service",
+              "Environment": "production"
+            },
+            "vpc_security_group_ids": ["sg-app-01"]
+          }
+        },
+        {
+          "address": "aws_security_group.db_sg",
+          "mode": "managed",
+          "type": "aws_security_group",
+          "name": "db_sg",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "sg-db-01",
+            "name": "production-database-sg",
+            "description": "Ingress from App tier AND new unreviewed analytics tier",
+            "ingress": [
+              {
+                "from_port": 5432,
+                "to_port": 5432,
+                "protocol": "tcp",
+                "cidr_blocks": [],
+                "security_groups": ["sg-app-01", "sg-analytics-01"]
+              }
+            ]
+          }
+        },
+        {
+          "address": "aws_db_instance.postgres",
+          "mode": "managed",
+          "type": "aws_db_instance",
+          "name": "postgres",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "rds-prod-customer-db",
+            "identifier": "production-customer-postgres",
+            "endpoint": "prod-db.cfg123.us-east-1.rds.amazonaws.com:5432",
+            "tags": {
+              "Name": "Production Customer DB"
+            },
+            "vpc_security_group_ids": ["sg-db-01"]
+          }
+        },
+        {
+          "address": "aws_security_group.analytics_sg",
+          "mode": "managed",
+          "type": "aws_security_group",
+          "name": "analytics_sg",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "sg-analytics-01",
+            "name": "analytics-worker-sg",
+            "description": "Uninspected analytics service security group"
+          }
+        },
+        {
+          "address": "aws_instance.analytics_service",
+          "mode": "managed",
+          "type": "aws_instance",
+          "name": "analytics_service",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "values": {
+            "id": "i-0f9e8d7c6b5a9999",
+            "private_ip": "10.0.3.99",
+            "tags": {
+              "Name": "AI Analytics Service",
+              "Environment": "experimental"
+            },
+            "vpc_security_group_ids": ["sg-analytics-01"]
+          }
+        }
+      ]
+    }
+  }
+}

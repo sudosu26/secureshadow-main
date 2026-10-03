@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: secureshadow-db
+    environment:
+      POSTGRES_USER: secureshadow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secureshadow_dev}
+      POSTGRES_DB: secureshadow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secureshadow -d secureshadow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: secureshadow-api
+    environment:
+      DATABASE_URL: postgresql+psycopg2://secureshadow:${POSTGRES_PASSWORD:-secureshadow_dev}@db:5432/secureshadow
+      JWT_SECRET: ${JWT_SECRET:-secureshadow-docker-dev-key}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-secureshadowadmin}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      ENABLE_SCHEDULER: ${ENABLE_SCHEDULER:-true}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

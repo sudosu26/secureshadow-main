@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Package build artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+sdist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Pytest
+.pytest_cache/
+
+# SQLite databases (generated at runtime)
+*.db
+
+# Environment files (contain secrets)
+.env
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Node.js
+node_modules/
+
+# Frontend build output
+frontend/dist/
+secureshadow/static/assets/
+
+# Docker volumes and logs
+postgres_data/
+*.log
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
