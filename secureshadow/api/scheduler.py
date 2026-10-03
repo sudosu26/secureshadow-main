@@ -32,7 +32,11 @@ async def scheduled_detection_job():
             return
 
         tf_path_env = os.getenv("SCHEDULED_TERRAFORM_PLAN_PATH")
-        if tf_path_env and Path(tf_path_env).exists():
+        if tf_path_env:
+            tf_file = Path(tf_path_env)
+            if not tf_file.exists():
+                logger.error("Scheduler: Configured SCHEDULED_TERRAFORM_PLAN_PATH not found: %s", tf_path_env)
+                raise FileNotFoundError(f"Terraform plan file not found: {tf_path_env}")
             loader = TerraformLoader()
             graph, _, _ = loader.build_graph_from_json(tf_path_env)
             engine_state["current_graph"] = graph

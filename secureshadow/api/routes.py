@@ -7,8 +7,12 @@ repair generation, remediation lifecycle tracking, audit logging, and asset inve
 import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 from ..db.database import get_db
 from ..db.models import (
@@ -96,8 +100,9 @@ def record_audit_log(
 
 
 @router.post("/auth/login", response_model=TokenResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
-    """Authenticate user and issue JWT."""
+@limiter.limit("10/minute")
+def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
+    """Authenticate user and issue JWT. Rate limited to 10 attempts per minute."""
     user = db.query(UserModel).filter(UserModel.username == req.username).first()
     if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(
@@ -116,7 +121,9 @@ def get_me(user: UserModel = Depends(get_current_user)):
 
 
 @router.post("/auth/change-password")
+@limiter.limit("5/minute")
 def change_password(
+    request: Request,
     req: ChangePasswordRequest,
     db: Session = Depends(get_db),
     user: UserModel = Depends(get_current_user),

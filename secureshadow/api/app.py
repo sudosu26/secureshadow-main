@@ -10,11 +10,14 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from sqlalchemy import text
 
 from ..db.database import init_db, SessionLocal
 from .auth import seed_admin_user
-from .routes import router as api_router
+from .routes import router as api_router, limiter
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -56,9 +59,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SECURESHADOW API",
     description="Silent Security Control Degradation & Architectural Drift Detection System",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
+
+# Register slowapi rate limiter state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Enable CORS (Configurable via environment variables for production safety)
 cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
@@ -83,7 +90,7 @@ if STATIC_DIR.exists():
     def serve_spa(full_path: str):
         """Serve SPA index.html for root and client-side routes, or static files."""
         if full_path.startswith("api/") or full_path == "api":
-            return FileResponse(status_code=404)
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
         target = STATIC_DIR / full_path
         if target.exists() and target.is_file():
             return FileResponse(str(target))
@@ -92,5 +99,36 @@ if STATIC_DIR.exists():
 
 @app.get("/health", tags=["System"])
 def health_check():
-    """Basic health check endpoint."""
-    return {"status": "healthy", "service": "secureshadow", "version": "0.4.0"}
+    """
+    Comprehensive operational healthcheck verifying API and active database connectivity.
+    """
+    db_ok = False
+    db_error = None
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+            db_ok = True
+        finally:
+            db.close()
+    except Exception as e:
+        db_error = str(e)
+        logger.error("Healthcheck: Database connectivity failed: %s", e)
+
+    if not db_ok:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "service": "secureshadow",
+                "version": "0.5.0",
+                "database": {"connected": False, "error": db_error},
+            },
+        )
+
+    return {
+        "status": "healthy",
+        "service": "secureshadow",
+        "version": "0.5.0",
+        "database": {"connected": True},
+    }

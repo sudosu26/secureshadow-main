@@ -28,3 +28,20 @@ async def test_scheduled_detection_job_execution():
     assert len(engine_state["analyzed_changes"]) == 2
     assert engine_state["latest_decay"] is not None
     assert engine_state["latest_decay"].decay_percent == 52.5
+
+
+@pytest.mark.anyio
+async def test_scheduled_job_logs_failure_on_missing_terraform_plan(monkeypatch, caplog):
+    import logging
+    init_db()
+    scenario = create_demo_scenario()
+    engine_state["baseline_graph"] = build_baseline_graph(scenario)
+
+    # Point to nonexistent plan file
+    monkeypatch.setenv("SCHEDULED_TERRAFORM_PLAN_PATH", "nonexistent/plan/file.json")
+
+    with caplog.at_level(logging.ERROR):
+        await scheduled_detection_job()
+
+    assert any("Configured SCHEDULED_TERRAFORM_PLAN_PATH not found" in record.message for record in caplog.records)
+    assert any("Scheduler error during scan" in record.message for record in caplog.records)

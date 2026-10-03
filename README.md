@@ -96,5 +96,33 @@ Copy `.env.example` to `.env` to configure settings securely for production:
 - `DATABASE_URL`: Connection string (defaults to local SQLite `secureshadow.db`)
 - `CORS_ORIGINS`: Allowed origins for the API
 
+## Database Backup & Restore (PostgreSQL / Docker)
+
+When running the containerized PostgreSQL setup (`secureshadow-db`), perform backups and restores using standard `pg_dump` and `pg_restore` / `psql` commands executed against the container.
+
+### 1. Taking a Backup
+Create a full SQL dump of the `secureshadow` database:
+
+```bash
+docker compose exec -T db pg_dump -U secureshadow secureshadow > backup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+Or binary custom format (`.dump`):
+```bash
+docker compose exec -T db pg_dump -U secureshadow -Fc secureshadow > backup_secureshadow.dump
+```
+
+### 2. Restoring from a Backup
+To restore a SQL dump into a clean or running PostgreSQL container:
+
+```bash
+docker compose exec -T db psql -U secureshadow -d secureshadow < backup_secureshadow.sql
+```
+
+For binary custom format:
+```bash
+docker compose exec -T db pg_restore -U secureshadow -d secureshadow --clean --if-exists backup_secureshadow.dump
+```
+
 ---
 *Built as a prototype to demonstrate the concept of silent security control degradation detection.*

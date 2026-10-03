@@ -34,6 +34,13 @@ COPY --from=frontend-build /app/secureshadow/static ./secureshadow/static/
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 
+# Create unprivileged service user and adjust directory ownership
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -s /bin/bash -m appuser && \
+    chown -R appuser:appgroup /app
+
+USER appuser:appgroup
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
