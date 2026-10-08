@@ -92,7 +92,7 @@ const MainLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans">
       <Navbar activeTab={activeTab} onSelectTab={handleSelectTab} />
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="relative flex-1 w-full max-w-screen-2xl mx-auto px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-9">
         {isNotFound ? (
           <div className="max-w-md mx-auto my-16 p-8 rounded-xl bg-slate-900/90 border border-slate-800 text-center space-y-4 shadow-xl">
             <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">

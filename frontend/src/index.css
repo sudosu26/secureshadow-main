@@ -5,7 +5,25 @@
 @layer base {
   body {
     @apply bg-[#090d16] text-slate-100 font-sans antialiased;
+    min-width: 320px;
   }
+
+  ::selection {
+    @apply bg-cyan-300/25 text-white;
+  }
+
+  :focus-visible {
+    outline-color: rgb(103 232 249 / 0.8);
+  }
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Custom scrollbars for data tables and logs */
