@@ -28,6 +28,7 @@ class RepairCandidate:
         # Effectiveness (0 - 100 scale, higher is better)
         self.security_improvement: float = 0.0
         self.restored_assumptions: List[str] = []
+        self.target_entity: Optional[str] = None
 
         # Derived metrics
         self.total_cost: float = 0.0
@@ -70,6 +71,7 @@ class RepairCandidate:
             "security_improvement": self.security_improvement,
             "cost_effectiveness_ratio": round(self.cost_effectiveness_ratio, 2),
             "restored_assumptions": list(self.restored_assumptions),
+            "target_entity": self.target_entity,
         }
 
     def __repr__(self) -> str:
@@ -119,6 +121,7 @@ class RepairOptimizer:
                 r1.implementation_time = 15.0
                 r1.security_improvement = 100.0
                 r1.restored_assumptions = [affected_asm_id]
+                r1.target_entity = "->".join(change.affected_entities[:2])
                 self.candidates.append(r1)
                 counter += 1
 
@@ -134,6 +137,7 @@ class RepairOptimizer:
                 r2.implementation_time = 40.0
                 r2.security_improvement = 95.0
                 r2.restored_assumptions = [affected_asm_id]
+                r2.target_entity = "->".join(change.affected_entities[:2])
                 self.candidates.append(r2)
                 counter += 1
 
@@ -149,6 +153,7 @@ class RepairOptimizer:
                 r3.implementation_time = 25.0
                 r3.security_improvement = 80.0
                 r3.restored_assumptions = [affected_asm_id]
+                r3.target_entity = "->".join(change.affected_entities[:2])
                 self.candidates.append(r3)
                 counter += 1
 
@@ -164,6 +169,7 @@ class RepairOptimizer:
                 r4.implementation_time = 20.0
                 r4.security_improvement = 45.0
                 r4.restored_assumptions = []
+                r4.target_entity = "->".join(change.affected_entities[:2])
                 self.candidates.append(r4)
                 counter += 1
 
@@ -179,6 +185,7 @@ class RepairOptimizer:
                 r.implementation_time = 50.0
                 r.security_improvement = 85.0
                 r.restored_assumptions = [affected_asm_id]
+                r.target_entity = change.affected_entities[0] if change.affected_entities else None
                 self.candidates.append(r)
                 counter += 1
 

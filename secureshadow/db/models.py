@@ -194,3 +194,12 @@ class RemediationModel(Base):
     resolved_at = Column(DateTime, nullable=True)
     target_entity = Column(String(200), nullable=True)
     details = Column(JSON, default=dict)
+
+
+class GraphSnapshotModel(Base):
+    """Durable baseline/current graph snapshots used to rebuild analysis state."""
+    __tablename__ = "graph_snapshots"
+
+    snapshot_name = Column(String(20), primary_key=True)
+    graph_data = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

@@ -17,6 +17,18 @@ When the environment changes—a new API, a new microservice, a new data path—
 6. **Protection Decay Score** — A deterministic score shows how much protection eroded and why.
 7. **Repair Engine** — Candidate repairs are generated, costed, and the most cost-effective is recommended.
 
+### Repair state and baseline semantics
+
+The approved baseline is persisted separately from the current architecture and is
+not changed by repair execution. Verifying a supported remediation updates the
+persisted current graph, refreshes inventory rows for current-only entities,
+recalculates drift and protection decay from the unchanged baseline, updates the
+remediation record, and writes a `REPAIR_EXECUTED` audit event in one database
+transaction. On the next API request or process start, graph state is rebuilt from
+the stored snapshots rather than relying on process memory. Existing installations
+create the new snapshot table through the normal startup schema initialization;
+Alembic installations can also apply it with `alembic upgrade head`.
+
 ## Architecture & Project Structure
 
 The project has been refactored into a modern Python package (`secureshadow/`) containing the core domain logic, a FastAPI backend, and an integrated Single Page Application (SPA) dashboard.
@@ -47,6 +59,24 @@ pip install -e .
 ```
 
 ## Running the Application
+
+### One-command launcher (Windows)
+
+Start the API and dashboard, then open the browser automatically:
+
+```powershell
+py .\run_secureshadow.py
+```
+
+Run the CLI demo before starting the server, or run only the demo:
+
+```powershell
+py .\run_secureshadow.py --demo
+py .\run_secureshadow.py --demo --no-server
+```
+
+Use `--no-browser` to keep the browser closed. The launcher checks dependencies,
+waits for the API health endpoint, and shuts down the server process on Ctrl+C.
 
 ### Option 1: FastAPI Web Server & Dashboard (Recommended)
 

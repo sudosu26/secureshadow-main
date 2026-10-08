@@ -10,7 +10,7 @@ import {
   GitCompare,
   Camera,
 } from 'lucide-react';
-import { api } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import { DecayReport, BaselineStats, Asset, SecurityControl, Remediation, SecurityProperty } from '../../types';
 import { Badge } from '../common/Badge';
 import { LoadingSpinner } from '../common/LoadingSpinner';
@@ -36,12 +36,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     setIsRefreshing(true);
     setError(null);
     try {
+      api.clearCache();
       const [bData, aData, cData, rData, pData] = await Promise.all([
-        api.getBaseline().catch(() => null),
-        api.listAssets().catch(() => []),
-        api.listControls().catch(() => []),
-        api.listRemediations().catch(() => []),
-        api.listProperties().catch(() => []),
+        api.getBaseline().catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) {
+            return null;
+          }
+          throw error;
+        }),
+        api.listAssets(),
+        api.listControls(),
+        api.listRemediations(),
+        api.listProperties(),
       ]);
 
       setBaseline(bData);
@@ -52,12 +58,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
 
       // Attempt to load decay report if baseline is active
       if (bData?.is_active) {
-        try {
-          const dData = await api.getDecayReport();
-          setDecay(dData);
-        } catch {
-          setDecay(null);
-        }
+        const dData = await api.getDecayReport();
+        setDecay(dData);
       } else {
         setDecay(null);
       }
@@ -70,7 +72,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   };
 
   useEffect(() => {
-    loadDashboardData();
+    const refresh = () => {
+      loadDashboardData();
+    };
+    window.addEventListener('state:updated', refresh);
+    refresh();
+    return () => window.removeEventListener('state:updated', refresh);
   }, []);
 
   if (isLoading) {

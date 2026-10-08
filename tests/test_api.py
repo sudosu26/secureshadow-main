@@ -95,10 +95,14 @@ def test_end_to_end_api_lifecycle():
     res_assets = client.get("/api/v1/assets", headers=headers)
     assert res_assets.status_code == 200
     assert len(res_assets.json()) >= 2
+    customer_api = next(asset for asset in res_assets.json() if asset["asset_id"] == "asset-001")
+    assert "Web Application Firewall" in customer_api["protecting_controls"]
 
     res_ctrls = client.get("/api/v1/controls", headers=headers)
     assert res_ctrls.status_code == 200
     assert len(res_ctrls.json()) >= 1
+    waf = next(control for control in res_ctrls.json() if control["control_id"] == "ctrl-001")
+    assert "Customer API" in waf["protects"]
 
 
 def test_change_password_flow():

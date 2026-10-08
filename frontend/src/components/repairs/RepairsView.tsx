@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { RepairCandidate, RepairResponse, Remediation } from '../../types';
+import { Asset, SecurityControl, CommunicationPath, ChangeEvent, DecayReport } from '../../types';
 import { Badge } from '../common/Badge';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { EmptyState } from '../common/EmptyState';
@@ -30,14 +31,22 @@ export const RepairsView: React.FC = () => {
 
   // Verifying action state
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [repairedState, setRepairedState] = useState<{
+    assets: Asset[];
+    controls: SecurityControl[];
+    paths: CommunicationPath[];
+    changes: ChangeEvent[];
+    decay: DecayReport;
+  } | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
     setError(null);
     try {
+      api.clearCache();
       const [rData, remsData] = await Promise.all([
-        api.getRepairs().catch(() => null),
-        api.listRemediations().catch(() => []),
+        api.getRepairs(),
+        api.listRemediations(),
       ]);
       setRepairsData(rData);
       setRemediations(remsData);
@@ -62,7 +71,7 @@ export const RepairsView: React.FC = () => {
         repair_id: selectedCandidate.repair_id,
         description: selectedCandidate.description,
         action_type: selectedCandidate.action_type,
-        target_entity: selectedCandidate.restored_assumptions[0] || 'bypass_path',
+        target_entity: selectedCandidate.target_entity || selectedCandidate.restored_assumptions[0] || 'bypass_path',
       });
       setSuccessMsg(
         `Remediation record '${newRem.remediation_id}' created with status IN_PROGRESS.`
@@ -82,6 +91,13 @@ export const RepairsView: React.FC = () => {
     setSuccessMsg(null);
     try {
       const res = await api.verifyRemediation(remediationId);
+      setRepairedState({
+        assets: res.assets,
+        controls: res.controls,
+        paths: res.paths,
+        changes: res.changes,
+        decay: res.decay,
+      });
       if (res.status === 'RESOLVED') {
         setSuccessMsg(
           `Remediation verified and marked RESOLVED! Protection restored to ${res.current_protection.toFixed(0)}%.`
@@ -89,6 +105,8 @@ export const RepairsView: React.FC = () => {
       } else {
         setError(res.message);
       }
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Verification execution failed.');
@@ -139,6 +157,15 @@ export const RepairsView: React.FC = () => {
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
           <span>{error}</span>
         </div>
+      )}
+
+      {repairedState && (
+        <section className="p-4 rounded-xl bg-slate-900/70 border border-cyan-500/30 text-xs font-mono space-y-2">
+          <h2 className="text-cyan-300 font-semibold">Authoritative state after verification</h2>
+          <p>Inventory: {repairedState.assets.length} assets, {repairedState.controls.length} controls, {repairedState.paths.length} paths</p>
+          <p>Drift: {repairedState.changes.length} change(s)</p>
+          <p>Protection: {repairedState.decay.current_protection.toFixed(0)}% ({repairedState.decay.health_label})</p>
+        </section>
       )}
 
       {/* Recommended Repair Card */}

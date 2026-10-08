@@ -10,8 +10,15 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from ..db.database import SessionLocal
-from .routes import execute_detection_pipeline, engine_state, record_audit_log
+from .routes import (
+    execute_detection_pipeline,
+    engine_state,
+    load_persisted_engine_state,
+    persist_current_inventory_delta,
+    record_audit_log,
+)
 from ..loaders.terraform import TerraformLoader
+from ..services.graph_state import persist_graph_snapshot
 
 logger = logging.getLogger("secureshadow.scheduler")
 
@@ -27,6 +34,7 @@ async def scheduled_detection_job():
     """
     db = SessionLocal()
     try:
+        load_persisted_engine_state(db)
         if not engine_state["baseline_graph"]:
             logger.info("Scheduler: Baseline not yet established. Skipping scan.")
             return
@@ -40,6 +48,9 @@ async def scheduled_detection_job():
             loader = TerraformLoader()
             graph, _, _ = loader.build_graph_from_json(tf_path_env)
             engine_state["current_graph"] = graph
+            persist_current_inventory_delta(db, engine_state["baseline_graph"], graph)
+            persist_graph_snapshot(db, "current", graph)
+            db.commit()
             logger.info("Scheduler: Ingested current state from %s", tf_path_env)
 
         if not engine_state["current_graph"]:

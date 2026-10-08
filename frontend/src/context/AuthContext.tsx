@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 
 interface AuthContextType {
   user: User | null;
@@ -28,8 +28,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const userData = await api.getMe();
           setUser(userData);
           localStorage.setItem('secureshadow_user', JSON.stringify(userData));
-        } catch {
-          logout();
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            logout();
+          } else {
+            console.error('Unable to verify the current session:', error);
+          }
         }
       }
       setIsLoading(false);

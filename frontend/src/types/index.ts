@@ -100,6 +100,7 @@ export interface RepairCandidate {
   security_improvement: number;
   cost_effectiveness_ratio: number;
   restored_assumptions: string[];
+  target_entity?: string | null;
   is_recommended: boolean;
   implementation_cost: number;
   business_impact: number;
@@ -134,7 +135,25 @@ export interface RemediationVerifyResponse {
   current_protection: number;
   decay_percent: number;
   health_label: HealthLabel;
+  total_changes: number;
+  critical_count: number;
+  warning_count: number;
   message: string;
+  assets: Asset[];
+  controls: SecurityControl[];
+  paths: CommunicationPath[];
+  changes: ChangeEvent[];
+  decay: DecayReport;
+  dashboard: {
+    assets: number;
+    controls: number;
+    remediations: number;
+    properties: number;
+    open_remediations: number;
+    current_protection: number;
+    decay_percent: number;
+    health_label: HealthLabel;
+  };
 }
 
 export interface AuditLog {

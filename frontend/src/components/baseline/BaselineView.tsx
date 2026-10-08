@@ -45,6 +45,8 @@ export const BaselineView: React.FC = () => {
     setSuccessMsg(null);
     try {
       const res = await api.captureBaseline('demo');
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(
         `Baseline established successfully with ${res.total_nodes} nodes and ${res.total_edges} edges.`
       );
@@ -73,6 +75,8 @@ export const BaselineView: React.FC = () => {
 
     try {
       const res = await api.captureBaseline('terraform', parsed);
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(
         `Terraform baseline captured: ${res.total_nodes} nodes, ${res.total_edges} edges.`
       );

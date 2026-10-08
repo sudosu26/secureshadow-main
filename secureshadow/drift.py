@@ -80,6 +80,9 @@ class DriftDetector:
             raise ValueError("Baseline not set. Call set_baseline() first.")
 
         current_snapshot = self._snapshot(current_graph)
+        if current_snapshot == self.baseline_snapshot:
+            return []
+
         changes: List[ChangeEvent] = []
 
         baseline_nodes = set(self.baseline_snapshot["nodes"].keys())
@@ -192,6 +195,8 @@ class AssumptionAnalyzer:
     def __init__(self, assumptions: List[Assumption]):
         self.assumptions = assumptions
         self.assumption_triggers = self._build_triggers()
+        self._enclave_cache: Dict[tuple[str, int], set[str]] = {}
+        self._comm_graph_cache: Dict[int, nx.DiGraph] = {}
 
     def _build_triggers(self) -> Dict[str, Dict[str, Any]]:
         triggers = {}
@@ -204,6 +209,17 @@ class AssumptionAnalyzer:
             }
         return triggers
 
+    def _get_communication_graph(self, graph: SecurityGraph) -> nx.DiGraph:
+        """Build once and reuse the communication-only graph for relevance checks."""
+        graph_key = id(graph)
+        if graph_key not in self._comm_graph_cache:
+            communication_graph = nx.DiGraph()
+            for source, target, data in graph.graph.edges(data=True):
+                if data.get("relationship") == "COMMUNICATES":
+                    communication_graph.add_edge(source, target)
+            self._comm_graph_cache[graph_key] = communication_graph
+        return self._comm_graph_cache[graph_key]
+
     def _get_protected_enclave(self, control_id: str, graph: SecurityGraph) -> set:
         """
         Determine the security-relevant node cluster for a control:
@@ -211,34 +227,28 @@ class AssumptionAnalyzer:
         2. All assets directly protected by the control (PROTECTS edges).
         3. All downstream assets reachable from protected assets via COMMUNICATES edges.
         """
+        cache_key = (control_id, id(graph))
+        if cache_key in self._enclave_cache:
+            return set(self._enclave_cache[cache_key])
+
         enclave = {control_id}
         if control_id not in graph.graph:
-            return enclave
+            self._enclave_cache[cache_key] = enclave
+            return set(enclave)
 
-        # Assets protected by this control
-        protected_assets = set()
-        for _, target, data in graph.graph.out_edges(control_id, data=True):
-            if data.get("relationship") == "PROTECTS":
-                protected_assets.add(target)
-
+        protected_assets = graph.get_protected_assets(control_id)
         enclave.update(protected_assets)
 
-        # Downstream assets reachable from protected assets via data flows
-        comm_edges = [
-            (u, v) for u, v, d in graph.graph.edges(data=True)
-            if d.get("relationship") == "COMMUNICATES"
-        ]
-        if comm_edges:
-            comm_graph = nx.DiGraph(comm_edges)
-            for pa in protected_assets:
-                if pa in comm_graph:
-                    try:
-                        descendants = nx.descendants(comm_graph, pa)
-                        enclave.update(descendants)
-                    except Exception:
-                        pass
+        communication_graph = self._get_communication_graph(graph)
+        for protected_asset in protected_assets:
+            if protected_asset in communication_graph:
+                try:
+                    enclave.update(nx.descendants(communication_graph, protected_asset))
+                except Exception:
+                    pass
 
-        return enclave
+        self._enclave_cache[cache_key] = set(enclave)
+        return set(enclave)
 
     def _is_change_topologically_relevant(
         self,
@@ -252,44 +262,35 @@ class AssumptionAnalyzer:
         """
         reference_graph = baseline_graph or current_graph
         enclave = self._get_protected_enclave(control_id, reference_graph)
-
-        # Build communication graph of current state
-        comm_edges = [
-            (u, v) for u, v, d in current_graph.graph.edges(data=True)
-            if d.get("relationship") == "COMMUNICATES"
-        ]
-        comm_graph = nx.DiGraph(comm_edges)
+        comm_graph = self._get_communication_graph(current_graph)
 
         # 1. Path changes (new data flow)
         if change.change_type == "new_communication_path":
             if len(change.affected_entities) >= 2:
                 src, dst = change.affected_entities[0], change.affected_entities[1]
-                # If path targets or originates from protected enclave
                 if dst in enclave or src in enclave:
-                    # Check if path passes through the required control
                     has_control = False
-                    for _, ctrl, d in current_graph.graph.out_edges(src, data=True):
-                        if ctrl == control_id and d.get("relationship") == "PASSES_THROUGH":
+                    for _, ctrl, data in current_graph.graph.out_edges(src, data=True):
+                        if ctrl == control_id and data.get("relationship") == "PASSES_THROUGH":
                             has_control = True
                             break
                     if not has_control:
                         return True
             return False
 
-        # 2. Node changes (new asset / service)
         if change.change_type.startswith("new_"):
             for entity_id in change.affected_entities:
                 if entity_id in enclave:
                     return True
-                # Check if new node has communication paths to/from any node in the protected enclave
                 if entity_id in comm_graph:
                     for target in enclave:
-                        if target in comm_graph:
-                            if nx.has_path(comm_graph, entity_id, target) or nx.has_path(comm_graph, target, entity_id):
-                                return True
+                        if target in comm_graph and (
+                            nx.has_path(comm_graph, entity_id, target)
+                            or nx.has_path(comm_graph, target, entity_id)
+                        ):
+                            return True
             return False
 
-        # 3. Control removal
         if change.change_type == "removed_control":
             return control_id in change.affected_entities
 
@@ -305,14 +306,16 @@ class AssumptionAnalyzer:
         Evaluate changes and annotate any that break assumptions based on topological proximity.
         If current_graph is provided, applies topological relevance filtering.
         """
+        if not changes:
+            return changes
+
         for change in changes:
             for asm_id, trigger_info in self.assumption_triggers.items():
                 if change.change_type in trigger_info["triggered_by"]:
-                    # If topology graph is available, perform subgraph relevance check
                     if current_graph is not None:
                         ctrl_id = trigger_info["control_id"]
                         if not self._is_change_topologically_relevant(change, ctrl_id, current_graph, baseline_graph):
-                            continue  # Unrelated change outside the assumption's security perimeter
+                            continue
 
                     change.potentially_breaks_assumptions = True
                     change.affected_assumption_id = asm_id

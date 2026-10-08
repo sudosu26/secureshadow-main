@@ -31,7 +31,7 @@ export const InventoryView: React.FC = () => {
       const [aData, cData, pData] = await Promise.all([
         api.listAssets(),
         api.listControls(),
-        api.listPaths().catch(() => []),
+        api.listPaths(),
       ]);
       setAssets(aData);
       setControls(cData);
@@ -44,13 +44,20 @@ export const InventoryView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadInventory();
+    const refresh = () => {
+      loadInventory();
+    };
+    window.addEventListener('state:updated', refresh);
+    refresh();
+    return () => window.removeEventListener('state:updated', refresh);
   }, []);
 
   const handleCreateAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await api.createAsset(newAsset);
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(`Asset '${newAsset.name}' created successfully.`);
       setIsAssetModalOpen(false);
       setNewAsset({ asset_id: '', name: '', asset_type: 'service', ip_address: '' });
@@ -64,6 +71,8 @@ export const InventoryView: React.FC = () => {
     if (!confirm(`Delete asset '${assetId}'?`)) return;
     try {
       await api.deleteAsset(assetId);
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(`Asset '${assetId}' removed.`);
       await loadInventory();
     } catch (err: any) {
@@ -75,6 +84,8 @@ export const InventoryView: React.FC = () => {
     e.preventDefault();
     try {
       await api.createControl(newControl);
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(`Security Control '${newControl.name}' created.`);
       setIsControlModalOpen(false);
       setNewControl({ control_id: '', name: '', control_type: 'waf', status: 'active' });
@@ -88,6 +99,8 @@ export const InventoryView: React.FC = () => {
     if (!confirm(`Delete control '${controlId}'?`)) return;
     try {
       await api.deleteControl(controlId);
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(`Control '${controlId}' removed.`);
       await loadInventory();
     } catch (err: any) {
@@ -99,6 +112,8 @@ export const InventoryView: React.FC = () => {
     e.preventDefault();
     try {
       await api.createPath(newPath);
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(`Communication path '${newPath.path_id}' created.`);
       setIsPathModalOpen(false);
       setNewPath({ path_id: '', source_id: '', destination_id: '', protocol: 'HTTPS' });
@@ -112,6 +127,8 @@ export const InventoryView: React.FC = () => {
     if (!confirm(`Delete communication path '${pathId}'?`)) return;
     try {
       await api.deletePath(pathId);
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setSuccessMsg(`Path '${pathId}' removed.`);
       await loadInventory();
     } catch (err: any) {

@@ -14,6 +14,10 @@ import {
 } from '../types';
 
 const API_BASE = '/api/v1';
+const GET_CACHE_TTL_MS = 5000;
+const GET_CACHE_MAX_ENTRIES = 100;
+const getCache = new Map<string, { expiresAt: number; value: any }>();
+const inFlightRequests = new Map<string, Promise<any>>();
 
 export class ApiError extends Error {
   status: number;
@@ -32,41 +36,106 @@ function getAuthHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function invalidateGetCache(prefix?: string) {
+  for (const key of Array.from(getCache.keys())) {
+    if (!prefix || key.startsWith(prefix)) {
+      getCache.delete(key);
+    }
+  }
+}
+
+function cacheGetResponse(key: string, value: any) {
+  const now = Date.now();
+  for (const [cachedKey, entry] of getCache) {
+    if (entry.expiresAt <= now) {
+      getCache.delete(cachedKey);
+    }
+  }
+
+  getCache.delete(key);
+  while (getCache.size >= GET_CACHE_MAX_ENTRIES) {
+    const oldestKey = getCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    getCache.delete(oldestKey);
+  }
+
+  getCache.set(key, { expiresAt: now + GET_CACHE_TTL_MS, value });
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method || 'GET').toUpperCase();
+  const isGetRequest = method === 'GET';
+  const authToken = localStorage.getItem('secureshadow_token') || '';
+  const cacheKey = `${method}:${endpoint}:${authToken}`;
+
+  if (isGetRequest) {
+    const cached = getCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value as T;
+    }
+
+    const inFlight = inFlightRequests.get(cacheKey);
+    if (inFlight) {
+      return inFlight as T;
+    }
+  }
+
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...getAuthHeader(),
     ...(options.headers as Record<string, string> || {}),
   };
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const requestPromise = fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
+  }).then(async (response) => {
+    if (response.status === 401) {
+      localStorage.removeItem('secureshadow_token');
+      localStorage.removeItem('secureshadow_user');
+      invalidateGetCache();
+      if (!window.location.pathname.includes('/login')) {
+        window.dispatchEvent(new Event('auth:unauthorized'));
+      }
+    }
+
+    const contentType = response.headers.get('content-type');
+    let data: any = null;
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    }
+
+    if (!response.ok) {
+      const errorMsg = data?.detail || `API Request Failed with status ${response.status}`;
+      throw new ApiError(response.status, errorMsg, data);
+    }
+
+    if (isGetRequest) {
+      cacheGetResponse(cacheKey, data);
+    } else {
+      invalidateGetCache('GET:');
+    }
+
+    return data as T;
+  }).finally(() => {
+    if (isGetRequest) {
+      inFlightRequests.delete(cacheKey);
+    }
   });
 
-  if (response.status === 401) {
-    localStorage.removeItem('secureshadow_token');
-    localStorage.removeItem('secureshadow_user');
-    if (!window.location.pathname.includes('/login')) {
-      window.dispatchEvent(new Event('auth:unauthorized'));
-    }
+  if (isGetRequest) {
+    inFlightRequests.set(cacheKey, requestPromise);
   }
 
-  const contentType = response.headers.get('content-type');
-  let data: any = null;
-  if (contentType && contentType.includes('application/json')) {
-    data = await response.json();
-  }
-
-  if (!response.ok) {
-    const errorMsg = data?.detail || `API Request Failed with status ${response.status}`;
-    throw new ApiError(response.status, errorMsg, data);
-  }
-
-  return data as T;
+  return requestPromise;
 }
 
 export const api = {
+  clearCache: () => {
+    invalidateGetCache();
+    inFlightRequests.clear();
+  },
+
   // Auth
   login: async (username: string, password: string): Promise<AuthResponse> => {
     return request<AuthResponse>('/auth/login', {

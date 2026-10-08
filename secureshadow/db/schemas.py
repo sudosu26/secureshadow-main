@@ -114,6 +114,7 @@ class RepairCandidateSchema(BaseModel):
     security_improvement: float
     cost_effectiveness_ratio: float
     restored_assumptions: List[str]
+    target_entity: Optional[str] = None
     is_recommended: bool = False
     implementation_cost: float
     business_impact: float

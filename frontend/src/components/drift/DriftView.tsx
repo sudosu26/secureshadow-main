@@ -18,6 +18,8 @@ export const DriftView: React.FC = () => {
     setStatusMsg(null);
     try {
       const res = await api.submitCurrentState('demo_drift');
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setStatusMsg(
         `Architectural drift introduced: rogue uninspected bypass added (${res.total_nodes} nodes).`
       );
@@ -32,7 +34,10 @@ export const DriftView: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
+      api.clearCache();
       const res = await api.detectDrift();
+      api.clearCache();
+      window.dispatchEvent(new Event('state:updated'));
       setDriftData(res);
       setStatusMsg(
         `Drift scan completed: ${res.total_changes} change(s) detected (${res.critical_count} critical).`
