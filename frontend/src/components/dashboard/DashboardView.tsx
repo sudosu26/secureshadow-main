@@ -9,6 +9,8 @@ import {
   RefreshCw,
   GitCompare,
   Camera,
+  CheckCircle2,
+  LockKeyhole,
 } from 'lucide-react';
 import { api, ApiError } from '../../api/client';
 import { DecayReport, BaselineStats, Asset, SecurityControl, Remediation, SecurityProperty } from '../../types';
@@ -56,7 +58,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       setRemediations(rData);
       setProperties(pData);
 
-      // Attempt to load decay report if baseline is active
       if (bData?.is_active) {
         const dData = await api.getDecayReport();
         setDecay(dData);
@@ -86,29 +87,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
 
   if (error) {
     return (
-      <div className="p-6 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300">
-        <h3 className="font-semibold text-sm font-mono mb-2">Error Loading Dashboard</h3>
-        <p className="text-xs mb-4">{error}</p>
-        <button
-          onClick={loadDashboardData}
-          className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-mono"
-        >
-          Retry
-        </button>
-      </div>
+      <section className="mx-auto max-w-2xl rounded-2xl border border-rose-400/20 bg-rose-400/[0.06] p-6 sm:p-8" aria-labelledby="dashboard-error-title">
+        <div className="flex items-start gap-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-rose-400/20 bg-rose-400/10 text-rose-300">
+            <ShieldAlert className="size-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-300/80">Dashboard unavailable</p>
+            <h1 id="dashboard-error-title" className="mt-1 text-lg font-semibold text-slate-100">We couldn&apos;t load your security overview</h1>
+            <p className="mt-2 break-words text-sm leading-6 text-slate-400">{error}</p>
+            <button
+              onClick={loadDashboardData}
+              disabled={isRefreshing}
+              className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-lg border border-rose-300/20 bg-rose-400/10 px-4 text-sm font-medium text-rose-200 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+              Try again
+            </button>
+          </div>
+        </div>
+      </section>
     );
   }
 
-  // If no baseline captured yet, show real empty state
   if (!baseline?.is_active && assets.length === 0) {
     return (
-      <EmptyState
-        icon={Camera}
-        title="No Baseline Established"
-        description="SECURESHADOW requires a known-good baseline snapshot to detect architectural drift and control degradation."
-        actionText="Establish Initial Baseline"
-        onAction={() => onNavigate('baseline')}
-      />
+      <div className="mx-auto max-w-3xl py-6 sm:py-12">
+        <EmptyState
+          icon={Camera}
+          title="No Baseline Established"
+          description="SECURESHADOW requires a known-good baseline snapshot to detect architectural drift and control degradation."
+          actionText="Establish Initial Baseline"
+          onAction={() => onNavigate('baseline')}
+        />
+      </div>
     );
   }
 
@@ -116,196 +128,191 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const decayPercent = decay ? decay.decay_percent : 0.0;
   const healthLabel = decay ? decay.health_label : 'HEALTHY';
   const openRemediationsCount = remediations.filter((r) => r.status !== 'RESOLVED').length;
+  const healthDescription = healthLabel === 'HEALTHY'
+    ? 'All assumptions intact'
+    : healthLabel === 'AT RISK'
+      ? 'Control bypass active'
+      : 'Protection needs attention';
+  const protectionColor = currentProtection >= 90
+    ? 'bg-emerald-400'
+    : currentProtection >= 70
+      ? 'bg-yellow-400'
+      : currentProtection >= 40
+        ? 'bg-amber-400'
+        : 'bg-rose-400';
 
   return (
-    <div className="space-y-6">
-      {/* Header & Quick Action Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-        <div>
-          <h1 className="text-xl font-bold font-mono text-slate-100 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-cyan-400" />
-            Security Posture & Control Integrity
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Real-time monitoring of control effectiveness against architectural drift.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={loadDashboardData}
-            disabled={isRefreshing}
-            className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-            title="Refresh Metrics"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>
-
-          <button
-            onClick={() => onNavigate('drift')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-medium transition-colors shadow-sm shadow-cyan-950"
-          >
-            <GitCompare className="w-3.5 h-3.5" />
-            Scan for Drift
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Protection Level */}
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
-              Protection Level
-            </span>
-            {currentProtection >= 90 ? (
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
-            ) : (
-              <ShieldAlert className="w-5 h-5 text-amber-400" />
-            )}
+    <div className="space-y-6 pb-6 sm:space-y-8">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-900/70 p-5 shadow-[0_18px_60px_-36px_rgba(0,0,0,0.85)] sm:p-7 lg:p-8">
+        <div className="pointer-events-none absolute -right-12 -top-20 size-64 rounded-full bg-cyan-400/[0.06] blur-3xl" aria-hidden="true" />
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/15 bg-cyan-400/[0.07] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200">
+                <Activity className="size-3.5" aria-hidden="true" /> Security operations
+              </span>
+              <span className="text-xs text-slate-500">Protection overview</span>
+            </div>
+            <h1 className="max-w-3xl text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              Security posture &amp; control integrity
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400 sm:text-[15px]">
+              Monitor how architectural changes affect the controls protecting your infrastructure.
+            </p>
           </div>
-          <div className="text-3xl font-bold font-mono text-slate-100 mb-2">
-            {currentProtection.toFixed(0)}%
-          </div>
-          {/* Progress bar */}
-          <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden mb-2">
-            <div
-              className={`h-full transition-all duration-500 ${
-                currentProtection >= 90
-                  ? 'bg-emerald-500'
-                  : currentProtection >= 70
-                  ? 'bg-yellow-500'
-                  : currentProtection >= 40
-                  ? 'bg-amber-500'
-                  : 'bg-rose-500'
-              }`}
-              style={{ width: `${currentProtection}%` }}
-            />
-          </div>
-          <div className="text-[11px] font-mono text-slate-400 flex justify-between">
-            <span>Baseline: 100%</span>
-            <span className={decayPercent > 0 ? 'text-rose-400 font-semibold' : 'text-slate-400'}>
-              Decay: -{decayPercent.toFixed(0)}%
-            </span>
-          </div>
-        </div>
-
-        {/* System Health Status */}
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
-              System Health
-            </span>
-            <Badge variant={healthLabel}>{healthLabel}</Badge>
-          </div>
-          <div className="text-lg font-bold font-mono text-slate-200 mt-2">
-            {healthLabel === 'HEALTHY'
-              ? 'All Assumptions Intact'
-              : healthLabel === 'AT RISK'
-              ? 'Control Bypass Active'
-              : 'Degraded Protection'}
-          </div>
-          <p className="text-[11px] font-mono text-slate-500 mt-2">
-            {decay?.contributors.length || 0} Broken Assumption Factor(s)
-          </p>
-        </div>
-
-        {/* Tracked Infrastructure */}
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
-              Infrastructure
-            </span>
-            <Server className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div className="text-3xl font-bold font-mono text-slate-100">
-            {assets.length} <span className="text-xs text-slate-400 font-normal">Assets</span>
-          </div>
-          <div className="text-[11px] font-mono text-slate-400 flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80">
-            <span>{controls.length} Security Controls</span>
-            <span>{baseline?.stats.total_edges || 0} Paths</span>
-          </div>
-        </div>
-
-        {/* Open Remediations */}
-        <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
-              Remediations
-            </span>
-            <Wrench className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="text-3xl font-bold font-mono text-slate-100">
-            {openRemediationsCount} <span className="text-xs text-slate-400 font-normal">Active</span>
-          </div>
-          <div className="text-[11px] font-mono text-slate-400 flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80">
-            <span>Total Tracked: {remediations.length}</span>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <button
-              onClick={() => onNavigate('repairs')}
-              className="text-cyan-400 hover:text-cyan-300 flex items-center gap-0.5"
+              onClick={loadDashboardData}
+              disabled={isRefreshing}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-700/90 bg-slate-950/50 px-4 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:bg-slate-800/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Refresh dashboard metrics"
             >
-              Manage <ArrowUpRight className="w-3 h-3" />
+              <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+              Refresh
+            </button>
+            <button
+              onClick={() => onNavigate('drift')}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-500 px-4 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+            >
+              <GitCompare className="size-4" aria-hidden="true" />
+              Scan for drift
             </button>
           </div>
         </div>
-      </div>
+        <div className="relative mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-800/80 pt-4 text-xs text-slate-400">
+          <span className="inline-flex items-center gap-2">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400/50" />
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+            </span>
+            Monitoring active
+          </span>
+          <span className="inline-flex items-center gap-1.5"><LockKeyhole className="size-3.5 text-slate-500" aria-hidden="true" /> Baseline {baseline?.is_active ? 'established' : 'not established'}</span>
+          <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-3.5 text-slate-500" aria-hidden="true" /> {properties.length} tracked guarantees</span>
+        </div>
+      </section>
 
-      {/* Properties Breakdown Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+      <section aria-label="Security posture metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="group rounded-2xl border border-slate-800/90 bg-slate-900/70 p-5 transition-colors hover:border-slate-700 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Protection level</p>
+              <p className="mt-3 text-4xl font-semibold tracking-tight text-white tabular-nums">{currentProtection.toFixed(0)}<span className="ml-0.5 text-2xl text-slate-400">%</span></p>
+            </div>
+            <div className={`flex size-10 items-center justify-center rounded-xl border ${currentProtection >= 90 ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-amber-400/20 bg-amber-400/10 text-amber-300'}`}>
+              {currentProtection >= 90 ? <ShieldCheck className="size-5" aria-hidden="true" /> : <ShieldAlert className="size-5" aria-hidden="true" />}
+            </div>
+          </div>
+          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-slate-800" role="progressbar" aria-label="Current protection level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0, Math.min(100, currentProtection))}>
+            <div className={`h-full rounded-full transition-all duration-500 ${protectionColor}`} style={{ width: `${Math.max(0, Math.min(100, currentProtection))}%` }} />
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2 text-[11px]">
+            <span className="text-slate-500">Baseline: 100%</span>
+            <span className={decayPercent > 0 ? 'font-medium text-rose-300' : 'text-slate-400'}>Decay: −{decayPercent.toFixed(0)}%</span>
+          </div>
+        </article>
+
+        <article className="group rounded-2xl border border-slate-800/90 bg-slate-900/70 p-5 transition-colors hover:border-slate-700 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-slate-400">System health</p>
+              <p className="mt-3 text-xl font-semibold tracking-tight text-white">{healthDescription}</p>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-950/60 text-slate-300">
+              <Activity className="size-5" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <Badge variant={healthLabel}>{healthLabel}</Badge>
+            <span className="text-right text-xs text-slate-500">{decay?.contributors.length || 0} broken assumptions</span>
+          </div>
+        </article>
+
+        <article className="group rounded-2xl border border-slate-800/90 bg-slate-900/70 p-5 transition-colors hover:border-slate-700 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Infrastructure</p>
+              <p className="mt-3 text-4xl font-semibold tracking-tight text-white tabular-nums">{assets.length}<span className="ml-2 text-sm font-medium text-slate-400">assets</span></p>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-200">
+              <Server className="size-5" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="mt-5 flex items-center justify-between border-t border-slate-800/80 pt-3 text-xs">
+            <span className="text-slate-400">{controls.length} security controls</span>
+            <span className="text-slate-500">{baseline?.stats.total_edges || 0} paths</span>
+          </div>
+        </article>
+
+        <article className="group rounded-2xl border border-slate-800/90 bg-slate-900/70 p-5 transition-colors hover:border-slate-700 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-slate-400">Remediations</p>
+              <p className="mt-3 text-4xl font-semibold tracking-tight text-white tabular-nums">{openRemediationsCount}<span className="ml-2 text-sm font-medium text-slate-400">active</span></p>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-200">
+              <Wrench className="size-5" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="mt-5 flex items-center justify-between border-t border-slate-800/80 pt-3 text-xs">
+            <span className="text-slate-400">{remediations.length} total tracked</span>
+            <button onClick={() => onNavigate('repairs')} className="inline-flex min-h-7 items-center gap-1 font-medium text-cyan-300 transition hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300" aria-label="Manage remediations">
+              Manage <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-900/65" aria-labelledby="properties-title">
+        <div className="flex flex-col gap-3 border-b border-slate-800/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
-            <h2 className="text-sm font-bold font-mono text-slate-200">
-              Tracked Security Properties & Assumed Guarantees
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Formal conditions under which each control is guaranteed to protect assets.
+            <div className="flex items-center gap-2">
+              <div className="flex size-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-950/70 text-cyan-300">
+                <LockKeyhole className="size-4" aria-hidden="true" />
+              </div>
+              <h2 id="properties-title" className="text-sm font-semibold text-slate-100 sm:text-base">Security properties &amp; guarantees</h2>
+            </div>
+            <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400 sm:ml-10 sm:text-sm">
+              Conditions that must remain true for each control to protect your assets.
             </p>
           </div>
-          <span className="text-xs font-mono text-slate-500">
-            {properties.length} Active Guarantees
+          <span className="inline-flex w-fit items-center rounded-full border border-slate-700/80 bg-slate-950/60 px-3 py-1.5 text-xs font-medium text-slate-300">
+            {properties.length} active {properties.length === 1 ? 'guarantee' : 'guarantees'}
           </span>
         </div>
 
         {properties.length === 0 ? (
-          <div className="p-8 text-center text-xs font-mono text-slate-500">
-            No properties registered. Capture a baseline or add properties in inventory.
+          <div className="px-5 py-12 text-center sm:px-6">
+            <div className="mx-auto flex size-11 items-center justify-center rounded-xl border border-slate-800 bg-slate-950/70 text-slate-500">
+              <LockKeyhole className="size-5" aria-hidden="true" />
+            </div>
+            <p className="mt-3 text-sm font-medium text-slate-300">No security properties yet</p>
+            <p className="mt-1 text-xs text-slate-500">Capture a baseline or add properties in your inventory.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/70 border-b border-slate-800 text-slate-400 font-mono">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="bg-slate-950/45 text-[11px] font-medium uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-6 py-3 font-semibold">Property ID</th>
-                  <th className="px-6 py-3 font-semibold">Guarantee Description</th>
-                  <th className="px-6 py-3 font-semibold">Protected Control</th>
-                  <th className="px-6 py-3 font-semibold">Severity</th>
-                  <th className="px-6 py-3 font-semibold">Effective Protection</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium sm:px-6">Property ID</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium sm:px-6">Guarantee description</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium sm:px-6">Protected control</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium sm:px-6">Severity</th>
+                  <th scope="col" className="px-5 py-3.5 font-medium sm:px-6">Protection</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono">
+              <tbody className="divide-y divide-slate-800/80">
                 {properties.map((prop) => (
-                  <tr key={prop.property_id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-6 py-3.5 text-cyan-400 font-semibold">{prop.property_id}</td>
-                    <td className="px-6 py-3.5 text-slate-200 font-sans max-w-md">
-                      {prop.description}
-                    </td>
-                    <td className="px-6 py-3.5 text-slate-300">{prop.control_id}</td>
-                    <td className="px-6 py-3.5">
-                      <Badge variant={prop.severity as any}>{prop.severity.toUpperCase()}</Badge>
-                    </td>
-                    <td className="px-6 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-200">
-                          {currentProtection.toFixed(0)}%
-                        </span>
-                        <div className="w-16 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                          <div
-                            className={`h-full ${
-                              currentProtection >= 90 ? 'bg-emerald-500' : 'bg-amber-500'
-                            }`}
-                            style={{ width: `${currentProtection}%` }}
-                          />
+                  <tr key={prop.property_id} className="transition-colors hover:bg-slate-800/25">
+                    <td className="whitespace-nowrap px-5 py-4 font-mono text-xs font-medium text-cyan-300 sm:px-6">{prop.property_id}</td>
+                    <td className="max-w-md px-5 py-4 leading-5 text-slate-300 sm:px-6">{prop.description}</td>
+                    <td className="whitespace-nowrap px-5 py-4 font-mono text-xs text-slate-400 sm:px-6">{prop.control_id}</td>
+                    <td className="whitespace-nowrap px-5 py-4 sm:px-6"><Badge variant={prop.severity as any}>{prop.severity.toUpperCase()}</Badge></td>
+                    <td className="whitespace-nowrap px-5 py-4 sm:px-6">
+                      <div className="flex items-center gap-3">
+                        <span className="min-w-9 font-mono text-xs font-medium tabular-nums text-slate-200">{currentProtection.toFixed(0)}%</span>
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-800" role="progressbar" aria-label={`${prop.property_id} protection`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0, Math.min(100, currentProtection))}>
+                          <div className={`h-full rounded-full ${protectionColor}`} style={{ width: `${Math.max(0, Math.min(100, currentProtection))}%` }} />
                         </div>
                       </div>
                     </td>
@@ -315,7 +322,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };
+
+export default DashboardView;
